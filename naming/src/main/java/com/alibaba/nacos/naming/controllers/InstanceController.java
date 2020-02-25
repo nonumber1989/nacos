@@ -93,6 +93,8 @@ public class InstanceController {
         String serviceName = WebUtils.required(request, CommonParams.SERVICE_NAME);
         String namespaceId = WebUtils.optional(request, CommonParams.NAMESPACE_ID, Constants.DEFAULT_NAMESPACE_ID);
 
+        Instance instance = parseInstance(request);
+        instance.setEnabled(false);
         serviceManager.registerInstance(namespaceId, serviceName, parseInstance(request));
         return "ok";
     }
