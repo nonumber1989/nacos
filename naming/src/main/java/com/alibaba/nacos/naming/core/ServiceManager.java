@@ -43,9 +43,7 @@ import org.springframework.util.CollectionUtils;
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -348,6 +346,32 @@ public class ServiceManager implements RecordListener<Service> {
     public Set<String> getAllServiceNames(String namespaceId) {
         return serviceMap.get(namespaceId).keySet();
     }
+
+    /**
+     * TODO need refactor original design : how to get service and instance mapping fast just by ip
+     * too many data may cause performance issue
+     * just for inner container cloud platform usage
+     * @param namespaceId
+     * @param ips
+     * @return
+     */
+    public Map<String,List<Instance>> getServiceAndInstances(String namespaceId,Set<String> ips) {
+        Map<String,List<Instance>> serviceInstances = new ConcurrentHashMap<>();
+        if (chooseServiceMap(namespaceId) == null) {
+            return serviceInstances;
+        }
+        Map<String, Service> services = serviceMap.get(namespaceId);
+        services.entrySet().parallelStream().forEach(service->{
+            List<Instance> instances = service.getValue().allIPs().stream()
+                .filter(instance -> ips.contains(instance.getIp())).collect(Collectors.toList());
+            if(Objects.nonNull(instances)&&!instances.isEmpty()){
+                //service is included
+                serviceInstances.put(service.getKey(),instances);
+            }
+        });
+        return serviceInstances;
+    }
+
 
     public Map<String, Set<String>> getAllServiceNames() {
 

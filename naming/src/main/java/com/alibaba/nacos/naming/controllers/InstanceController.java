@@ -16,11 +16,7 @@
 package com.alibaba.nacos.naming.controllers;
 
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -262,7 +258,7 @@ public class InstanceController {
         return result;
     }
 
-    @RequestMapping("/statuses")
+    @GetMapping("/statuses")
     public JSONObject listWithHealthStatus(@RequestParam String key) throws NacosException {
 
         String serviceName;
@@ -293,6 +289,59 @@ public class InstanceController {
 
         result.put("ips", ipArray);
         return result;
+    }
+
+    @CanDistro
+    @PutMapping("/statuses")
+    public String updateStatuses(HttpServletRequest request) throws Exception {
+        String namespaceId = WebUtils.optional(request, CommonParams.NAMESPACE_ID, Constants.DEFAULT_NAMESPACE_ID);
+        String ips = WebUtils.optional(request, "ips", StringUtils.EMPTY);
+        String enabledString = WebUtils.optional(request, "enabled", StringUtils.EMPTY);
+        boolean enabled;
+        if (StringUtils.isBlank(enabledString)) {
+            enabled = BooleanUtils.toBoolean(WebUtils.optional(request, "enable", "true"));
+        } else {
+            enabled = BooleanUtils.toBoolean(enabledString);
+        }
+
+        String[] ipArray = ips.split(",");
+
+        String agent = WebUtils.getUserAgent(request);
+        ClientInfo clientInfo = new ClientInfo(agent);
+
+        if(ipArray.length>0){
+            Set<String> ipSet = new HashSet<String>(Arrays.asList(ipArray));
+            Map<String,List<Instance>> serviceAndInstances = serviceManager.getServiceAndInstances(namespaceId,ipSet);
+            System.out.println(serviceAndInstances);
+            if (clientInfo.type == ClientInfo.ClientType.JAVA &&
+                clientInfo.version.compareTo(VersionUtil.parseVersion("1.0.0")) >= 0) {
+                serviceAndInstances.values().parallelStream()
+                    .flatMap(instances-> instances.stream())
+                    .forEach(instance -> {
+                        try {
+                            instance.setEnabled(enabled);
+                            //TODO performance tuning , use variable params further
+                            serviceManager.updateInstance(namespaceId, instance.getServiceName(), instance);
+                        } catch (NacosException e) {
+                            //just check service and instance
+                            Loggers.SRV_LOG.error("batch update instance statues failed !", e.getErrMsg());
+                        }
+                });
+            } else {
+                serviceAndInstances.values().parallelStream().flatMap(instances-> instances.stream()).forEach(instance -> {
+                    try {
+                        instance.setEnabled(enabled);
+                        //TODO performance tuning , use variable params further
+                        serviceManager.registerInstance(namespaceId, instance.getServiceName(), instance);
+                    } catch (NacosException e) {
+                        //just check service and instance
+                        Loggers.SRV_LOG.error("batch update instance statues failed !", e.getErrMsg());
+                    }
+                });
+
+            }
+        }
+        return "ok";
     }
 
     private Instance parseInstance(HttpServletRequest request) throws Exception {
