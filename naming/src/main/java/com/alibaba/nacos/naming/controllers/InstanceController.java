@@ -303,6 +303,7 @@ public class InstanceController {
         } else {
             enabled = BooleanUtils.toBoolean(enabledString);
         }
+        boolean ephemeral = BooleanUtils.toBoolean(WebUtils.optional(request, "ephemeral", String.valueOf(switchDomain.isDefaultInstanceEphemeral())));
 
         String[] ipArray = ips.split(",");
 
@@ -315,33 +316,52 @@ public class InstanceController {
             System.out.println(serviceAndInstances);
             if (clientInfo.type == ClientInfo.ClientType.JAVA &&
                 clientInfo.version.compareTo(VersionUtil.parseVersion("1.0.0")) >= 0) {
-                serviceAndInstances.values().parallelStream()
-                    .flatMap(instances-> instances.stream())
-                    .forEach(instance -> {
-                        try {
-                            instance.setEnabled(enabled);
-                            //TODO performance tuning , use variable params further
-                            serviceManager.updateInstance(namespaceId, instance.getServiceName(), instance);
-                        } catch (NacosException e) {
-                            //just check service and instance
-                            Loggers.SRV_LOG.error("batch update instance statues failed !", e.getErrMsg());
-                        }
-                });
-            } else {
-                serviceAndInstances.values().parallelStream().flatMap(instances-> instances.stream()).forEach(instance -> {
-                    try {
-                        instance.setEnabled(enabled);
-                        //TODO performance tuning , use variable params further
-                        serviceManager.registerInstance(namespaceId, instance.getServiceName(), instance);
-                    } catch (NacosException e) {
-                        //just check service and instance
-                        Loggers.SRV_LOG.error("batch update instance statues failed !", e.getErrMsg());
-                    }
+                serviceAndInstances.entrySet().forEach(serviceMap->{
+                    String serviceName = serviceMap.getKey();
+                    List<Instance> instances = serviceMap.getValue();
+                    updateStatus(instances,serviceName,namespaceId,ephemeral,enabled,false);
                 });
 
+            } else {
+                serviceAndInstances.entrySet().forEach(serviceMap->{
+                    String serviceName = serviceMap.getKey();
+                    List<Instance> instances = serviceMap.getValue();
+                    updateStatus(instances,serviceName,namespaceId,ephemeral,enabled,true);
+                });
             }
         }
         return "ok";
+    }
+
+    /**
+     * update status by service
+     * @param instances
+     * @param serviceName
+     * @param namespaceId
+     * @param ephemeral
+     * @param enabled
+     */
+    private void updateStatus(List<Instance> instances,String serviceName,String namespaceId,
+                              boolean ephemeral,boolean enabled,boolean forRegister){
+        try {
+            if(forRegister){
+                serviceManager.createEmptyService(namespaceId, serviceName, true);
+            }
+            Service service = serviceManager.getService(namespaceId, serviceName);
+            if (service == null) {
+                throw new NacosException(NacosException.INVALID_PARAM, "service not found, namespace: " + namespaceId + ", service: " + serviceName);
+            }
+            Instance[] instancesArray= instances.stream().map(instance -> {
+                instance.setEnabled(enabled);
+                instance.setEphemeral(ephemeral);
+                return instance;
+            }).toArray(size->new Instance[size]);
+            serviceManager.addInstance(namespaceId, serviceName, true, instancesArray);
+        }catch (NacosException e){
+            if (Loggers.SRV_LOG.isErrorEnabled()) {
+                Loggers.SRV_LOG.error("update instance statues failed, namespace: {}, service: {} ,error message is {}", namespaceId, serviceName,e.getErrCode());
+            }
+        }
     }
 
     private Instance parseInstance(HttpServletRequest request) throws Exception {

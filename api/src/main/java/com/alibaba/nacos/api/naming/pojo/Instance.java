@@ -60,7 +60,7 @@ public class Instance {
     /**
      * If instance is enabled to accept request
      */
-    private boolean enabled = true;
+    private boolean enabled = false;
 
     /**
      * If instance is ephemeral
