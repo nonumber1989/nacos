@@ -105,7 +105,8 @@ public class NamespaceController {
                                    @RequestParam("namespaceName") String namespaceName,
                                    @RequestParam(value = "namespaceDesc", required = false) String namespaceDesc) {
         // TODO 获取用kp
-        String namespaceId = UUID.randomUUID().toString();
+//        String namespaceId = UUID.randomUUID().toString();
+        String namespaceId = namespaceName;
         persistService.insertTenantInfoAtomic("1", namespaceId, namespaceName, namespaceDesc, "nacos",
             System.currentTimeMillis());
         return true;
