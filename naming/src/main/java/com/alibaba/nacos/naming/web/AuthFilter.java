@@ -30,14 +30,13 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.security.AccessControlException;
-import java.util.stream.Stream;
 
 /**
  * @author nkorange
  */
 public class AuthFilter implements Filter {
 
-    private static final String[] NAMESPACE_FORBIDDEN_STRINGS = new String[]{".."};
+    private static final String[] NAMESPACE_FORBIDDEN_STRINGS = new String[]{"..", "/"};
 
     @Autowired
     private AuthChecker authChecker;
@@ -76,7 +75,8 @@ public class AuthFilter implements Filter {
             String namespaceId = req.getParameter(CommonParams.NAMESPACE_ID);
 
             if (StringUtils.isNotBlank(namespaceId)) {
-                if (containsForbiddenString(namespaceId)) {
+
+                if (namespaceId.contains(NAMESPACE_FORBIDDEN_STRINGS[0]) || namespaceId.contains(NAMESPACE_FORBIDDEN_STRINGS[1])) {
                     throw new IllegalArgumentException("forbidden namespace: " + namespaceId);
                 }
             }
@@ -101,14 +101,5 @@ public class AuthFilter implements Filter {
     @Override
     public void destroy() {
 
-    }
-
-    private boolean containsForbiddenString(String namespaceId){
-        boolean forbidden = false;
-        Long count = Stream.of(NAMESPACE_FORBIDDEN_STRINGS).filter(element-> namespaceId.contains(element)).count();
-        if(count>0){
-            forbidden =true;
-        }
-        return forbidden;
     }
 }
